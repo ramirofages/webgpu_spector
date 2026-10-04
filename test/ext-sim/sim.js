@@ -8,6 +8,24 @@
   const TAB = { id: 1, index: 0, windowId: 1, title: document.title, url: location.href };
   const log = (...a) => console.log('[sim]', ...a);
 
+  // Small keys (settings, enabled sites, the capture index) survive reloads like real storage;
+  // capture data stays in memory.
+  const PERSIST = 'ext-sim-storage';
+  try
+  {
+    for (const [k, v] of Object.entries(JSON.parse(sessionStorage.getItem(PERSIST) ?? '{}'))) stores.local.set(k, v);
+  }
+  catch { /* ignore */ }
+  function persist()
+  {
+    const small = {};
+    for (const [k, v] of stores.local) if (!k.startsWith('cap:') && k !== 'captures:index') small[k] = v;
+    sessionStorage.setItem(PERSIST, JSON.stringify(small));
+  }
+
+  let registered = JSON.parse(sessionStorage.getItem('ext-sim-scripts') ?? '[]');
+  window.__simRegistered = () => registered;
+
   function area(map)
   {
     return {
@@ -21,11 +39,13 @@
       set(obj)
       {
         for (const [k, v] of Object.entries(obj)) map.set(k, structuredClone(v));
+        if (map === stores.local) persist();
         return Promise.resolve();
       },
       remove(keys)
       {
         for (const k of [].concat(keys)) map.delete(k);
+        if (map === stores.local) persist();
         return Promise.resolve();
       }
     };
@@ -89,6 +109,8 @@
           const targets = extListeners.filter((x) => x.role !== role).map((x) => x.fn);
           return dispatch(targets, msg, role === 'content' ? { tab: TAB, frameId: 0 } : {});
         },
+        onInstalled: { addListener() {} },
+        onStartup: { addListener() {} },
         onMessage: {
           addListener(fn)
           {
@@ -105,6 +127,21 @@
         reload: () => location.reload(),
         onUpdated: { addListener() {} },
         onRemoved: { addListener() {} }
+      },
+      scripting: {
+        getRegisteredContentScripts: async () => registered,
+        registerContentScripts: async (list) =>
+        {
+          registered = list;
+          sessionStorage.setItem('ext-sim-scripts', JSON.stringify(list));
+          log('registerContentScripts', list.map((x) => `${x.id} ${x.world ?? 'ISOLATED'} ${x.matches.join(',')}`));
+        },
+        unregisterContentScripts: async () =>
+        {
+          registered = [];
+          sessionStorage.setItem('ext-sim-scripts', '[]');
+          log('unregisterContentScripts');
+        }
       },
       action: {
         setBadgeText: async (o) => { document.getElementById('badge').textContent = o.text || '—'; },

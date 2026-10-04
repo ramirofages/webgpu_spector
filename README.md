@@ -33,8 +33,7 @@ npm run build
 ```
 
 Then in Chrome: `chrome://extensions` → enable **Developer mode** → **Load unpacked** → pick
-the `dist/` folder. Reload any tab that was already open (the hook has to load before the page
-creates its GPU device). For `file://` pages, also enable "Allow access to file URLs" on the
+the `dist/` folder. For `file://` pages, also enable "Allow access to file URLs" on the
 extension's details page.
 
 While developing the extension itself, `npm run watch` rebuilds on save; press the reload
@@ -42,9 +41,12 @@ button on the extension card afterwards.
 
 ## Use
 
-1. Open a page that renders with WebGPU. The toolbar icon shows a **GPU** badge once a device
-   exists.
-2. Click the icon, then **Capture frame**. The capture starts on the next
+1. Open a page that renders with WebGPU and click the toolbar icon. The extension is **off on
+   every site by default**: press **Enable on <site>**. The page reloads so the hook is in place
+   before the page creates its GPU device. The site stays enabled (across browser restarts)
+   until you press **Disable on <site>**. A site is a hostname, so enabling `localhost` covers
+   every port.
+2. The toolbar icon shows a **GPU** badge once a device exists. Press **Capture frame**. The capture starts on the next
    `requestAnimationFrame` (or the next canvas `getCurrentTexture()`), and ends when the next
    frame begins.
 3. A results tab opens. Captures are kept in extension storage (the 12 most recent, up to
@@ -78,6 +80,10 @@ window.__WEBGPU_SPECTOR__?.capture({ snapshotSize: 2048 });   // override any op
 
 ## How it works
 
+- Nothing is injected anywhere by default. Enabling a site makes the background worker register
+  `hook.js` (page main world) and `content.js` for that hostname with
+  `chrome.scripting.registerContentScripts`; disabling unregisters them. The list lives in
+  `chrome.storage.local` (`enabledSites`) and the registrations persist across sessions.
 - `hook.js` runs in the page's main world at `document_start`, before any page script, and
   patches the WebGPU prototypes. Object creation is always tracked (a WeakMap entry with the
   descriptor), because a capture needs to describe objects created long before it. The patches
@@ -101,12 +107,15 @@ window.__WEBGPU_SPECTOR__?.capture({ snapshotSize: 2048 });   // override any op
 
 - Pages that render from a **Web Worker** (OffscreenCanvas transferred to a worker) can't be
   captured: content scripts don't run in workers.
+- WebGPU inside a cross-origin iframe needs that iframe's site enabled too.
+- Disabling a site takes full effect when its open pages reload (until then the hook stays in
+  the page, idle).
 - Only the captured frame is slowed down (by the pass splitting and readback). Between captures,
   draw/pass/encoder calls are native (no wrapper at all); object creation costs about +0.5 µs per
   call (`createBindGroup` 1.0 → 1.5 µs). Measured with `test/bench/` (`?hook=0` vs `?hook=1`):
-  10k draws per frame and a 2000-mesh three.js scene showed no measurable difference. Usage flags
-  are added on every page while the extension is enabled, which could cost a little GPU-side
-  (e.g. render-target compression on some drivers).
+  10k draws per frame and a 2000-mesh three.js scene showed no measurable difference. On enabled
+  sites, the extra usage flags could cost a little GPU-side (e.g. render-target compression on
+  some drivers).
 - Compute passes aren't split per dispatch: storage buffers and textures show their state at the
   end of the pass.
 - 3D textures, stencil and cube faces other than face 0 aren't previewed yet.

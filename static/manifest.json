@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "WebGPU Spector",
   "version": "0.1.0",
-  "description": "Capture a WebGPU frame and inspect every draw call, the image after each draw, shaders, bind groups and buffers.",
+  "description": "Capture a WebGPU frame and inspect every draw call, the image after each draw, shaders, bind groups and buffers. Off by default; enable it per site.",
   "minimum_chrome_version": "121",
   "icons": {
     "16": "icons/icon16.png",
@@ -21,22 +21,12 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "unlimitedStorage", "activeTab"],
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["hook.js"],
-      "run_at": "document_start",
-      "all_frames": true,
-      "match_about_blank": true,
-      "world": "MAIN"
-    },
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_start",
-      "all_frames": true,
-      "match_about_blank": true
-    }
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ]
 }

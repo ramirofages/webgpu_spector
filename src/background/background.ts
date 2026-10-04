@@ -1,7 +1,55 @@
-// Service worker: remembers which tabs/frames use WebGPU (for the popup and the badge),
-// keeps the capture index, and opens the results tab.
+// Service worker: injects the hook only on the sites the user enabled, remembers which
+// tabs/frames use WebGPU (for the popup and the badge), keeps the capture index, and opens the
+// results tab.
 
 import { MAX_STORED_BYTES, MAX_STORED_CAPTURES, STORAGE_INDEX_KEY, type CaptureIndexEntry, type PageStatus } from '../shared/protocol';
+import { SITES_KEY, siteOf, sitePatterns } from '../shared/sites';
+
+// -- per-site activation -----------------------------------------------------------
+
+const SCRIPT_IDS = ['wgs-hook', 'wgs-content'];
+
+async function getSites(): Promise<string[]>
+{
+  const r = await chrome.storage.local.get(SITES_KEY);
+  return (r[SITES_KEY] as string[]) ?? [];
+}
+
+let registrationChain: Promise<unknown> = Promise.resolve();
+
+/** Registers hook.js + content.js for exactly the enabled sites (nothing when none are). */
+function syncRegistrations(): Promise<void>
+{
+  const next = registrationChain.then(async () =>
+  {
+    const sites = await getSites();
+    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: SCRIPT_IDS });
+    if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing.map((s) => s.id) });
+    if (!sites.length) return;
+    const matches = sites.flatMap(sitePatterns);
+    await chrome.scripting.registerContentScripts([
+      // The hook must run in the page's world before any page script creates a GPU device.
+      { id: 'wgs-hook', js: ['hook.js'], matches, runAt: 'document_start', allFrames: true, matchOriginAsFallback: true, world: 'MAIN', persistAcrossSessions: true },
+      { id: 'wgs-content', js: ['content.js'], matches, runAt: 'document_start', allFrames: true, matchOriginAsFallback: true, persistAcrossSessions: true }
+    ]);
+  });
+  registrationChain = next.catch((e) => console.error('[WebGPU Spector] could not register content scripts', e));
+  return next;
+}
+
+async function setSiteEnabled(site: string, enabled: boolean): Promise<void>
+{
+  const sites = (await getSites()).filter((s) => s !== site);
+  if (enabled) sites.push(site);
+  await chrome.storage.local.set({ [SITES_KEY]: sites.sort() });
+  await syncRegistrations();
+}
+
+// Registrations persist across browser sessions, but are re-applied after installs/updates.
+chrome.runtime.onInstalled.addListener(() => { syncRegistrations(); });
+chrome.runtime.onStartup.addListener(() => { syncRegistrations(); });
+
+// -- tab status --------------------------------------------------------------------
 
 type FrameStatuses = Record<string, PageStatus & { frameId: number; updated: number }>;
 
@@ -66,6 +114,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) =>
 
     case 'getTabStatus':
       getFrames(msg.tabId).then(sendResponse, () => sendResponse({}));
+      return true;
+
+    case 'getSite':
+    {
+      const site = siteOf(msg.url);
+      getSites().then((sites) => sendResponse({ site, enabled: !!site && sites.includes(site) }), () => sendResponse({ site, enabled: false }));
+      return true;
+    }
+
+    case 'setSite':
+      setSiteEnabled(msg.site, !!msg.enabled).then(() => sendResponse({ ok: true }), (e) => sendResponse({ ok: false, error: String(e?.message ?? e) }));
       return true;
 
     case 'captureStored':

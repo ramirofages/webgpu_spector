@@ -7,6 +7,7 @@ import {
   type CaptureSettings,
   type PageStatus
 } from '../shared/protocol';
+import { siteLabel } from '../shared/sites';
 
 type FrameStatus = PageStatus & { frameId: number };
 
@@ -74,47 +75,144 @@ $('#reset-settings').addEventListener('click', () =>
   chrome.storage.local.set({ [STORAGE_SETTINGS_KEY]: DEFAULT_SETTINGS });
 });
 
-// -- status ----------------------------------------------------------------------------
+// -- site activation & status --------------------------------------------------------
+
+/** undefined = not checked yet, null = a page the extension can't run on. */
+let site: string | null | undefined;
+let siteEnabled = false;
+/** Whether the content script answered in the top frame (false: the page predates enabling). */
+let hookLoaded = false;
+let justDisabled = false;
 
 async function refreshStatus(): Promise<void>
 {
   if (!tab?.id) return;
+  const info: { site: string | null; enabled: boolean } | null = await chrome.runtime.sendMessage({ type: 'getSite', url: tab.url }).catch(() => null);
+  site = info?.site ?? null;
+  siteEnabled = !!info?.enabled;
+  if (!site || !siteEnabled)
+  {
+    frames = [];
+    hookLoaded = false;
+    render();
+    return;
+  }
+
   // Frames that reported WebGPU use to the background, plus the top frame asked directly (so a
   // lost status message never hides a page that is rendering).
   const stored: Record<string, FrameStatus> = await chrome.runtime.sendMessage({ type: 'getTabStatus', tabId: tab.id }).catch(() => ({}));
   const frameIds = new Set<number>([0, ...Object.values(stored ?? {}).map((f) => f.frameId)]);
   const list: FrameStatus[] = [];
+  hookLoaded = false;
   for (const frameId of frameIds)
   {
-    const fresh: PageStatus | null = await chrome.tabs.sendMessage(tab.id, { type: 'getStatus' }, { frameId }).catch(() => null);
+    const reply = await chrome.tabs.sendMessage(tab.id, { type: 'getStatus' }, { frameId }).then(
+      (v: PageStatus | null) => ({ ok: true, v }),
+      () => ({ ok: false, v: null as PageStatus | null })
+    );
+    if (frameId === 0 && reply.ok) hookLoaded = true;
     const known = Object.values(stored ?? {}).find((f) => f.frameId === frameId);
-    if (fresh || known) list.push({ ...(fresh ?? known!), frameId });
+    if (reply.v || known) list.push({ ...(reply.v ?? known!), frameId });
   }
   frames = list.filter((f) => f.webgpu && (f.devices > 0 || f.adapters > 0));
   render();
 }
+
+function reloadButton(): HTMLButtonElement
+{
+  const reload = el('button', { className: 'secondary', textContent: 'Reload page' });
+  reload.addEventListener('click', () =>
+  {
+    if (tab?.id) chrome.tabs.reload(tab.id);
+    window.close();
+  });
+  return reload;
+}
+
+const enableBtn = $<HTMLButtonElement>('#enable');
+const disableBtn = $<HTMLButtonElement>('#disable');
+
+async function setSite(enabled: boolean): Promise<void>
+{
+  if (!site || !tab?.id) return;
+  enableBtn.disabled = true;
+  disableBtn.disabled = true;
+  const r = await chrome.runtime.sendMessage({ type: 'setSite', site, enabled }).catch((e) => ({ ok: false, error: String(e) }));
+  enableBtn.disabled = false;
+  disableBtn.disabled = false;
+  if (!r?.ok)
+  {
+    showProgress({ phase: 'error', message: `Could not change the site setting: ${r?.error ?? 'unknown error'}` });
+    return;
+  }
+  if (enabled)
+  {
+    // The hook has to be in place before the page creates its GPU device.
+    chrome.tabs.reload(tab.id);
+    window.close();
+    return;
+  }
+  justDisabled = true;
+  await refreshStatus();
+}
+
+enableBtn.addEventListener('click', () => setSite(true));
+disableBtn.addEventListener('click', () => setSite(false));
 
 function render(): void
 {
   statusEl.replaceChildren();
   const title = frames.find((f) => f.frameId === 0)?.title || tab?.title || '';
   $('#tab-title').textContent = title || tab?.url || '';
+  const label = site ? siteLabel(site) : '';
 
+  enableBtn.hidden = !site || siteEnabled;
+  disableBtn.hidden = !site || !siteEnabled;
+  captureBtn.hidden = !site || !siteEnabled;
+  enableBtn.textContent = `Enable on ${label}`;
+  disableBtn.textContent = `Disable on ${label}`;
+  framesEl.hidden = true;
+
+  if (site === undefined)
+  {
+    statusEl.append(el('p', { className: 'muted' }, 'Checking this page…'));
+    return;
+  }
+  if (site === null)
+  {
+    statusEl.append(el('p', {}, el('span', { className: 'dot off' }), 'WebGPU Spector can’t run on this page.'));
+    return;
+  }
+  if (!siteEnabled)
+  {
+    statusEl.append(el('p', {}, el('span', { className: 'dot off' }), `Off for ${label}.`));
+    if (justDisabled)
+    {
+      statusEl.append(el('p', { className: 'muted' }, 'The open page keeps the hook until it reloads.'), reloadButton());
+    }
+    else
+    {
+      statusEl.append(el('p', { className: 'muted' }, 'Nothing is injected into this site until you enable it. Enabling reloads the page, so the hook is in place before it creates its GPU device. It stays enabled until you disable it.'));
+    }
+    return;
+  }
+  if (!hookLoaded)
+  {
+    statusEl.append(
+      el('p', {}, el('span', { className: 'dot off' }), `On for ${label}. Reload the page to start.`),
+      el('p', { className: 'muted' }, 'This page was opened before the hook was enabled (or before the extension was reloaded).'),
+      reloadButton()
+    );
+    captureBtn.disabled = true;
+    return;
+  }
   if (!frames.length)
   {
     statusEl.append(
-      el('p', {}, el('span', { className: 'dot off' }), 'No WebGPU activity seen on this page yet.'),
-      el('p', { className: 'muted' }, 'If the page was already open when the extension was installed or reloaded, reload it so the hook loads before the page creates its GPU device.')
+      el('p', {}, el('span', { className: 'dot off' }), `On for ${label}. No WebGPU device yet.`),
+      el('p', { className: 'muted' }, 'The capture button unlocks once the page creates a GPU device. If WebGPU only runs inside a cross-origin iframe, enable that iframe’s site too.')
     );
-    const reload = el('button', { className: 'secondary', textContent: 'Reload page' });
-    reload.addEventListener('click', () =>
-    {
-      if (tab?.id) chrome.tabs.reload(tab.id);
-      window.close();
-    });
-    statusEl.append(reload);
     captureBtn.disabled = true;
-    framesEl.hidden = true;
     return;
   }
 
