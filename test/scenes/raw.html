@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Raw WebGPU test scene</title>
+  <script src="/dist/hook.js"></script>
+  <script src="/dist/devbridge.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; color: #ddd; font: 13px system-ui; }
+    canvas { width: 100%; height: 100%; display: block; }
+    #err { position: fixed; top: 10px; left: 10px; color: #f66; white-space: pre; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="err"></div>
+<script type="module" src="raw-scene.js"></script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>three.js WebGPU test scene</title>
+  <script src="/dist/hook.js"></script>
+  <script src="/dist/devbridge.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.webgpu.js",
+        "three/webgpu": "/node_modules/three/build/three.webgpu.js",
+        "three/tsl": "/node_modules/three/build/three.tsl.js"
+      }
+    }
+  </script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; }
+    canvas { width: 100%; height: 100%; display: block; }
+  </style>
+</head>
+<body>
+<canvas class="main-canvas"></canvas>
+<script type="module">
+// Mirrors a typical production setup: MSAA, log depth, shadows, AgX tone mapping, sRGB output.
+import * as THREE from 'three/webgpu';
+
+const canvas = document.querySelector('.main-canvas');
+const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: false, logarithmicDepthBuffer: true, forceWebGL: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.AgXToneMapping;
+renderer.shadowMap.enabled = true;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x202530);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(6, 5, 9);
+camera.lookAt(0, 0.5, 0);
+
+const sun = new THREE.DirectionalLight(0xffffff, 3);
+sun.name = 'sun';
+sun.position.set(5, 10, 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+scene.add(sun, new THREE.HemisphereLight(0xbcd4ff, 0x302010, 0.8));
+
+// Procedural texture.
+const tc = document.createElement('canvas');
+tc.width = tc.height = 256;
+const g = tc.getContext('2d');
+for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++)
+{
+  g.fillStyle = (x + y) % 2 ? '#e8e2d0' : '#c44d3a';
+  g.fillRect(x * 32, y * 32, 32, 32);
+}
+const tex = new THREE.CanvasTexture(tc);
+tex.colorSpace = THREE.SRGBColorSpace;
+tex.name = 'checker canvas texture';
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.9 }));
+ground.name = 'ground';
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const meshes = [];
+const geos = [new THREE.BoxGeometry(1, 1, 1), new THREE.SphereGeometry(0.6, 32, 16), new THREE.TorusKnotGeometry(0.45, 0.16, 96, 12)];
+for (let i = 0; i < 9; i++)
+{
+  const mat = i % 3 === 0
+    ? new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 })
+    : new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(i / 9, 0.6, 0.55), roughness: 0.3, metalness: i % 2 ? 0.6 : 0 });
+  const m = new THREE.Mesh(geos[i % 3], mat);
+  m.name = `mesh ${i}`;
+  m.position.set((i % 3) * 2.2 - 2.2, 0.8, Math.floor(i / 3) * 2.2 - 2.2);
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+  meshes.push(m);
+}
+
+addEventListener('resize', () =>
+{
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight, false);
+});
+
+renderer.setAnimationLoop((t) =>
+{
+  meshes.forEach((m, i) => { m.rotation.y = t / 1000 + i; m.rotation.x = t / 1700; });
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "webgpu-spector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Spector.js-style frame capture for WebGPU, as a Chrome extension",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "serve": "node tools/serve.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.4",
+    "@webgpu/types": "^0.1.74",
+    "esbuild": "^0.28.2",
+    "three": "^0.183.2",
+    "typescript": "^7.0.2",
+    "wgsl_reflect": "^1.6.0"
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}

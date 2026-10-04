@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>WebGPU Spector</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon48.png" width="28" height="28" alt="">
+    <div>
+      <h1>WebGPU Spector</h1>
+      <p id="tab-title">…</p>
+    </div>
+  </header>
+
+  <section id="status" class="card"></section>
+
+  <div id="frames" hidden></div>
+
+  <button id="capture" class="primary" disabled>Capture frame</button>
+
+  <div id="progress" hidden>
+    <div class="bar"><div></div></div>
+    <span class="msg"></span>
+  </div>
+
+  <details id="options">
+    <summary>Capture options</summary>
+    <form id="settings">
+      <label class="check"><input type="checkbox" name="drawSnapshots"> Image after every draw</label>
+      <label class="row">Image size
+        <select name="snapshotSize">
+          <option value="256">256 px</option>
+          <option value="512">512 px</option>
+          <option value="768">768 px</option>
+          <option value="1024">1024 px</option>
+          <option value="1536">1536 px</option>
+          <option value="2048">2048 px</option>
+          <option value="4096">4096 px</option>
+        </select>
+      </label>
+      <label class="row">Max draws with images
+        <input type="number" name="maxDrawSnapshots" min="1" step="100">
+      </label>
+      <label class="check"><input type="checkbox" name="depthSnapshots"> Depth image after every draw</label>
+      <label class="check"><input type="checkbox" name="textureSnapshots"> Previews of sampled textures</label>
+      <label class="check"><input type="checkbox" name="bufferSnapshots"> Buffer contents (uniforms, vertices…)</label>
+      <label class="row">Per-buffer copy limit
+        <select name="maxBufferBytes">
+          <option value="65536">64 KB</option>
+          <option value="262144">256 KB</option>
+          <option value="1048576">1 MB</option>
+          <option value="4194304">4 MB</option>
+          <option value="16777216">16 MB</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="stackTraces"> JS stack trace per draw</label>
+      <label class="check"><input type="checkbox" name="floatAsSrgb"> Show float targets sRGB-encoded</label>
+      <label class="check"><input type="checkbox" name="losslessImages"> Lossless images (exact pixels, bigger captures)</label>
+      <button type="button" id="reset-settings" class="link">Reset to defaults</button>
+    </form>
+  </details>
+
+  <section id="recent">
+    <h2>Recent captures</h2>
+    <ul></ul>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

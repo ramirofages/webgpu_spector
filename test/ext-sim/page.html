@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<script>
+  // Loads an extension page (popup.html / result.html) from dist/ with the mocked chrome API.
+  const p = new URLSearchParams(location.search);
+  fetch('/dist/' + p.get('page')).then((r) => r.text()).then((html) =>
+  {
+    const inject = '<base href="/dist/"><script>window.chrome = parent.__simMakeChrome(' + JSON.stringify(p.get('role')) + ');<\/script>';
+    html = html.replace(/<head>/i, '<head>' + inject);
+    document.open();
+    document.write(html);
+    document.close();
+  });
+</script>

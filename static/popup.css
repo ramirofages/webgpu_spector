@@ -1,0 +1,155 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #656d76;
+  --card: #f6f8fa;
+  --border: #d0d7de;
+  --accent: #7c4dff;
+  --accent-fg: #ffffff;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --err: #cf222e;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1d22;
+    --fg: #e6edf3;
+    --muted: #8d96a0;
+    --card: #23262d;
+    --border: #353a43;
+    --accent: #9d7bff;
+    --accent-fg: #ffffff;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --err: #f85149;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  width: 360px;
+  padding: 14px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+h1 { font-size: 15px; margin: 0; }
+h2 { font-size: 12px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+#tab-title {
+  margin: 0;
+  color: var(--muted);
+  max-width: 290px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.card p { margin: 0 0 4px; }
+.card p:last-child { margin-bottom: 0; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.dot.ok { background: var(--ok); }
+.dot.off { background: var(--muted); }
+.muted { color: var(--muted); }
+.canvas-list { margin: 6px 0 0; padding: 0; list-style: none; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+#frames { margin-bottom: 10px; }
+#frames label { display: flex; gap: 6px; align-items: center; padding: 3px 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button.primary {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+button.primary:disabled { opacity: .45; cursor: default; }
+
+button.secondary {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+button.link {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  padding: 4px 0;
+}
+
+#progress { margin-top: 10px; }
+#progress .bar { height: 4px; border-radius: 2px; background: var(--card); overflow: hidden; }
+#progress .bar > div { height: 100%; width: 30%; background: var(--accent); transition: width .2s; }
+#progress .bar.indeterminate > div { animation: slide 1.1s ease-in-out infinite; }
+#progress .msg { display: block; margin-top: 6px; color: var(--muted); }
+#progress.error .msg { color: var(--err); }
+
+@keyframes slide {
+  0% { margin-left: -30%; }
+  100% { margin-left: 100%; }
+}
+
+details { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+form { display: grid; gap: 6px; margin-top: 8px; }
+label.check { display: flex; gap: 6px; align-items: center; }
+label.row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+select, input[type=number] {
+  font: inherit;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  width: 110px;
+}
+
+#recent ul { list-style: none; margin: 0; padding: 0; max-height: 210px; overflow: auto; }
+#recent li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#recent li:hover { background: var(--card); }
+#recent li .info { flex: 1; min-width: 0; }
+#recent li .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#recent li .sub { color: var(--muted); font-size: 11px; }
+#recent li button { visibility: hidden; border: 0; background: none; color: var(--muted); font-size: 14px; }
+#recent li:hover button { visibility: visible; }
+#recent .empty { color: var(--muted); cursor: default; }
