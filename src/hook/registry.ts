@@ -61,7 +61,12 @@ export const HANDLE_TYPES = new Set([
   'GPUQuerySet', 'GPUCanvasContext'
 ]);
 
+/** Prototypes of the handle types: a Set lookup is much cheaper than Object.prototype.toString. */
+export const HANDLE_PROTOS = new Set<object>(
+  [...HANDLE_TYPES].map((n) => (globalThis as any)[n]?.prototype).filter(Boolean)
+);
+
 export function isHandle(v: any): boolean
 {
-  return typeof v === 'object' && v !== null && HANDLE_TYPES.has(tagOf(v));
+  return typeof v === 'object' && v !== null && HANDLE_PROTOS.has(Object.getPrototypeOf(v));
 }

@@ -80,8 +80,9 @@ window.__WEBGPU_SPECTOR__?.capture({ snapshotSize: 2048 });   // override any op
 
 - `hook.js` runs in the page's main world at `document_start`, before any page script, and
   patches the WebGPU prototypes. Object creation is always tracked (a WeakMap entry with the
-  descriptor), because a capture needs to describe objects created long before it. Commands are
-  only recorded while a capture is running.
+  descriptor), because a capture needs to describe objects created long before it. The patches
+  on encoders, passes and queue writes are only installed while a capture is pending or running,
+  and the native methods are restored afterwards.
 - To read attachments and textures back, it adds `COPY_SRC | TEXTURE_BINDING` to texture and
   canvas usages and `COPY_SRC` to buffers. Transient attachments are left alone.
 - **Per-draw images**: during the captured frame, each render pass is split after every draw:
@@ -100,9 +101,12 @@ window.__WEBGPU_SPECTOR__?.capture({ snapshotSize: 2048 });   // override any op
 
 - Pages that render from a **Web Worker** (OffscreenCanvas transferred to a worker) can't be
   captured: content scripts don't run in workers.
-- Only the captured frame is slowed down (by the pass splitting and readback). On other frames
-  the hook costs a WeakMap write per object creation and a check per call. Usage flags are
-  added on every page while the extension is enabled.
+- Only the captured frame is slowed down (by the pass splitting and readback). Between captures,
+  draw/pass/encoder calls are native (no wrapper at all); object creation costs about +0.5 µs per
+  call (`createBindGroup` 1.0 → 1.5 µs). Measured with `test/bench/` (`?hook=0` vs `?hook=1`):
+  10k draws per frame and a 2000-mesh three.js scene showed no measurable difference. Usage flags
+  are added on every page while the extension is enabled, which could cost a little GPU-side
+  (e.g. render-target compression on some drivers).
 - Compute passes aren't split per dispatch: storage buffers and textures show their state at the
   end of the pass.
 - 3D textures, stencil and cube faces other than face 0 aren't previewed yet.
@@ -116,6 +120,7 @@ npm run serve     # http://localhost:5180/test/ : test scenes with the hook load
 
 - `test/scenes/raw.html`: hand-written WebGPU covering most features.
 - `test/scenes/three.html`: a three.js `WebGPURenderer` scene.
+- `test/bench/index.html?hook=0|1`: CPU overhead of the hook when not capturing.
 - `test/ext-sim/`: runs the real popup, content script, background and results page in one tab
   with a mocked `chrome.*`, to test the full flow without installing the extension.
 - `node tools/inject-proxy.mjs http://localhost:1234 5190`: proxies any dev server and injects

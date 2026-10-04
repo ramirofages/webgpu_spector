@@ -23,6 +23,30 @@ function patch(proto: any, name: string, make: Wrapper): void
   Object.defineProperty(proto, name, { ...d, value: wrapped });
 }
 
+// Patches only needed while a capture is pending/running (or a split pass is still open).
+// Outside captures the original methods are put back, so per-draw calls cost nothing.
+const captureOnly: { proto: any; name: string; desc: PropertyDescriptor; orig: (...a: any[]) => any; wrapped: (...a: any[]) => any }[] = [];
+let captureHooksOn = false;
+
+function patchCapture(proto: any, name: string, make: Wrapper): void
+{
+  if (!proto) return;
+  const d = Object.getOwnPropertyDescriptor(proto, name);
+  if (!d || typeof d.value !== 'function') return;
+  const orig = d.value;
+  const wrapped = make(orig);
+  Object.defineProperty(wrapped, 'name', { value: name, configurable: true });
+  Object.defineProperty(wrapped, 'length', { value: orig.length, configurable: true });
+  captureOnly.push({ proto, name, desc: d, orig, wrapped });
+}
+
+export function setCaptureHooks(on: boolean): void
+{
+  if (on === captureHooksOn) return;
+  captureHooksOn = on;
+  for (const p of captureOnly) Object.defineProperty(p.proto, p.name, { ...p.desc, value: on ? p.wrapped : p.orig });
+}
+
 function methods(proto: any): string[]
 {
   if (!proto) return [];
@@ -225,7 +249,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
     });
   }
 
-  patch(D, 'createCommandEncoder', (orig) => function (this: GPUDevice, ...args: any[])
+  patchCapture(D, 'createCommandEncoder', (orig) => function (this: GPUDevice, ...args: any[])
   {
     const enc = orig.apply(this, args);
     if (rec.active) guard(() => rec.trackEncoder(enc, this, args[0]));
@@ -268,7 +292,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
     return orig.apply(this, args);
   });
 
-  patch(GPUBuffer.prototype, 'mapAsync', (orig) => function (this: GPUBuffer, ...args: any[])
+  patchCapture(GPUBuffer.prototype, 'mapAsync', (orig) => function (this: GPUBuffer, ...args: any[])
   {
     guard(() =>
     {
@@ -278,7 +302,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
     return orig.apply(this, args);
   });
 
-  patch(GPUBuffer.prototype, 'unmap', (orig) => function (this: GPUBuffer, ...args: any[])
+  patchCapture(GPUBuffer.prototype, 'unmap', (orig) => function (this: GPUBuffer, ...args: any[])
   {
     guard(() =>
     {
@@ -343,7 +367,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
     return ret;
   });
 
-  patch(GPUCanvasContext.prototype, 'getCurrentTexture', (orig) => function (this: GPUCanvasContext, ...args: any[])
+  patchCapture(GPUCanvasContext.prototype, 'getCurrentTexture', (orig) => function (this: GPUCanvasContext, ...args: any[])
   {
     const tex = orig.apply(this, args);
     guard(() =>
@@ -394,7 +418,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
     return ret;
   });
 
-  patch(Q, 'writeBuffer', (orig) => function (this: GPUQueue, ...args: any[])
+  patchCapture(Q, 'writeBuffer', (orig) => function (this: GPUQueue, ...args: any[])
   {
     if (rec.active) guard(() =>
     {
@@ -410,7 +434,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
 
   for (const name of ['writeTexture', 'copyExternalImageToTexture'])
   {
-    patch(Q, name, (orig) => function (this: GPUQueue, ...args: any[])
+    patchCapture(Q, name, (orig) => function (this: GPUQueue, ...args: any[])
     {
       if (rec.active) guard(() =>
       {
@@ -425,7 +449,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
 
   const E = GPUCommandEncoder.prototype;
 
-  patch(E, 'beginRenderPass', (orig) => function (this: GPUCommandEncoder, ...args: any[])
+  patchCapture(E, 'beginRenderPass', (orig) => function (this: GPUCommandEncoder, ...args: any[])
   {
     const er = rec.active ? rec.encRecs.get(this) : undefined;
     if (!er) return orig.apply(this, args);
@@ -463,7 +487,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
     return pass;
   });
 
-  patch(E, 'beginComputePass', (orig) => function (this: GPUCommandEncoder, ...args: any[])
+  patchCapture(E, 'beginComputePass', (orig) => function (this: GPUCommandEncoder, ...args: any[])
   {
     const pass = orig.apply(this, args);
     const er = rec.active ? rec.encRecs.get(this) : undefined;
@@ -478,7 +502,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
     return pass;
   });
 
-  patch(E, 'finish', (orig) => function (this: GPUCommandEncoder, ...args: any[])
+  patchCapture(E, 'finish', (orig) => function (this: GPUCommandEncoder, ...args: any[])
   {
     const cb = orig.apply(this, args);
     const er = rec.encRecs.get(this);
@@ -493,7 +517,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
   for (const name of methods(E))
   {
     if (name === 'beginRenderPass' || name === 'beginComputePass' || name === 'finish') continue;
-    patch(E, name, (orig) => function (this: GPUCommandEncoder, ...args: any[])
+    patchCapture(E, name, (orig) => function (this: GPUCommandEncoder, ...args: any[])
     {
       const er = rec.active ? rec.encRecs.get(this) : undefined;
       if (er) guard(() =>
@@ -529,7 +553,7 @@ export function installPatches(rec: Recorder, status: StatusTracker): void
   {
     for (const name of methods(proto))
     {
-      patch(proto, name, (orig) => function (this: any, ...args: any[])
+      patchCapture(proto, name, (orig) => function (this: any, ...args: any[])
       {
         if (rec.openPasses === 0) return orig.apply(this, args);
         const pr = rec.passRecs.get(this);

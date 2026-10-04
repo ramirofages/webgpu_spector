@@ -1,4 +1,4 @@
-import { HANDLE_TYPES, idOf, tagOf } from './registry';
+import { HANDLE_PROTOS, HANDLE_TYPES, idOf, tagOf } from './registry';
 
 const DOM_SOURCES = new Set([
   'HTMLCanvasElement', 'HTMLImageElement', 'HTMLVideoElement', 'ImageBitmap', 'OffscreenCanvas',
@@ -33,6 +33,26 @@ export function clone(v: any, depth = 0): any
   const t = typeof v;
   if (t !== 'object') return t === 'function' ? undefined : v;
   if (depth > 12) return '[…]';
+  // Fast paths for what descriptors are made of: plain objects, arrays, GPU handles.
+  if (Array.isArray(v))
+  {
+    const out = new Array(v.length);
+    for (let i = 0; i < v.length; i++) out[i] = clone(v[i], depth + 1);
+    return out;
+  }
+  const proto = Object.getPrototypeOf(v);
+  if (proto === Object.prototype || proto === null)
+  {
+    const out: any = {};
+    for (const k in v)
+    {
+      const x = v[k];
+      if (x === undefined || typeof x === 'function') continue;
+      out[k] = clone(x, depth + 1);
+    }
+    return out;
+  }
+  if (HANDLE_PROTOS.has(proto)) return v;
   const tag = tagOf(v);
   if (HANDLE_TYPES.has(tag)) return v;
   if (isBinary(v))

@@ -645,6 +645,8 @@ export class Recorder
   onProgress: (p: CaptureProgress) => void = () => {};
   onResult: (r: CaptureResultMessage) => void = () => {};
   onState: () => void = () => {};
+  /** Installs / removes the capture-only prototype patches. */
+  setHooks: (on: boolean) => void = () => {};
 
   // capture data
   seq = 0;
@@ -687,6 +689,7 @@ export class Recorder
   {
     if (this.state !== 'idle') return false;
     this.settings = { ...DEFAULT_SETTINGS, ...(settings ?? {}) };
+    this.setHooks(true);
     this.state = 'pending';
     this.onState();
     this.onProgress({ phase: 'waiting', message: 'Waiting for the next frame…' });
@@ -761,6 +764,7 @@ export class Recorder
     clearTimeout(this.maxTimer);
     this.state = 'finalizing';
     this.onState();
+    this.releaseHooks();
     const duration = performance.now() - this.startTime;
     this.finalize(duration).catch((e) =>
     {
@@ -771,7 +775,14 @@ export class Recorder
       this.resetData();
       this.state = 'idle';
       this.onState();
+      this.releaseHooks();
     });
+  }
+
+  /** Back to zero overhead once nothing needs redirecting (split passes must close first). */
+  private releaseHooks(): void
+  {
+    if (this.state !== 'active' && this.state !== 'pending' && this.openPasses === 0) this.setHooks(false);
   }
 
   private resetData(): void
@@ -842,12 +853,12 @@ export class Recorder
 
   bumpTexture(t: GPUTexture | null | undefined): void
   {
-    if (t) this.texEpoch.set(t, (this.texEpoch.get(t) ?? 0) + 1);
+    if (t && this.state === 'active') this.texEpoch.set(t, (this.texEpoch.get(t) ?? 0) + 1);
   }
 
   bumpBuffer(b: GPUBuffer | null | undefined): void
   {
-    if (b) this.bufEpoch.set(b, (this.bufEpoch.get(b) ?? 0) + 1);
+    if (b && this.state === 'active') this.bufEpoch.set(b, (this.bufEpoch.get(b) ?? 0) + 1);
   }
 
   /** Storage bindings may have been written by the pass: invalidate cached snapshots of them. */
@@ -890,6 +901,7 @@ export class Recorder
   {
     this.passRecs.delete(pr.app);
     this.openPasses = Math.max(0, this.openPasses - 1);
+    this.releaseHooks();
   }
 
   private snap(pr: PassRec, view: any, depthClear?: number): number | null

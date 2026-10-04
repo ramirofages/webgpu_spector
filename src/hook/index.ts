@@ -3,7 +3,7 @@
 import { CONTENT_TAG, HOOK_TAG, type CaptureSettings, type PageStatus } from '../shared/protocol';
 import { Recorder } from './capture';
 import { captureOriginals } from './gpu';
-import { StatusTracker, installPatches } from './patches';
+import { StatusTracker, installPatches, setCaptureHooks } from './patches';
 
 declare global
 {
@@ -47,6 +47,7 @@ function hookScriptUrl(): string
     rec.onProgress = (p) => post('progress', p);
     rec.onResult = (r) => post('result', r);
     rec.onState = () => status.changed();
+    rec.setHooks = setCaptureHooks;
   }
 
   window.addEventListener('message', (e) =>

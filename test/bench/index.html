@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Hook overhead benchmark</title>
+  <script>
+    // ?hook=1 loads the hook exactly like the extension would (first script, before anything else).
+    window.__HOOK = new URLSearchParams(location.search).get('hook') === '1';
+    if (window.__HOOK) document.write('<script src="/dist/hook.js"><\/script>');
+  </script>
+  <script type="importmap">{ "imports": { "three/webgpu": "/node_modules/three/build/three.webgpu.js" } }</script>
+</head>
+<body style="background:#111;color:#ddd;font:13px monospace">
+<canvas id="c" width="256" height="256"></canvas>
+<pre id="out">running…</pre>
+<script type="module" src="bench.js"></script>
+</body>
+</html>
