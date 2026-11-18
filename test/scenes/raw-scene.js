@@ -210,7 +210,7 @@ struct V { @builtin(position) p: vec4f, @location(0) uv: vec2f };
 
   // Indirect args for one more cube.
   const indirect = device.createBuffer({ label: 'indirect args', size: 20, usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST });
-  device.queue.writeBuffer(indirect, 0, new Uint32Array([36, 1, 0, 0, 0]));
+  device.queue.writeBuffer(indirect, 0, new Uint32Array([36, 3, 0, 0, 0]));
 
   const querySet = device.createQuerySet({ label: 'occlusion', type: 'occlusion', count: 1 });
   const queryBuf = device.createBuffer({ label: 'occlusion results', size: 8, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
@@ -223,7 +223,7 @@ struct V { @builtin(position) p: vec4f, @location(0) uv: vec2f };
   benc.setBindGroup(0, objBG, [SLOT * 10]);
   benc.drawIndexed(36);
   benc.setBindGroup(0, objBG, [SLOT * 11]);
-  benc.drawIndexed(36);
+  benc.drawIndexed(36, 2);
   const bundle = benc.finish({ label: 'two cubes bundle' });
 
   let msaa, depth, w = 0, h = 0;

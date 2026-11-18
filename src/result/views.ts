@@ -5,6 +5,7 @@ import { clear, debounce, fmtBytes, h, kv } from './dom';
 import { renderDetails } from './details';
 import { buildModel, shortType, type TreeNode, type VisualState } from './model';
 import { limitsTable, objectTitle, renderObject } from './objects';
+import { computeVertexStats } from './stats';
 import { ptree, refLink } from './widgets';
 
 const ROW_H = 22;
@@ -492,20 +493,38 @@ export function infoView(ctx: Ctx): HTMLElement
   const m = cap.meta;
   const s = m.stats;
   const page = h('div', { class: 'info-page' });
-  const stat = (n: number | string, l: string) => h('div', { class: 'stat' }, h('div', { class: 'n' }, String(n)), h('div', { class: 'l' }, l));
+  const stat = (n: number | string, l: string, title?: string) => h('div', { class: 'stat', title }, h('div', { class: 'n' }, String(n)), h('div', { class: 'l' }, l));
+  const geometry = stat('…', 'geometry vertices', 'Vertices of the geometries drawn. A mesh drawn in two passes counts twice.');
+  const total = stat('…', 'total drawn vertices', 'Geometry vertices that include instance count. A mesh drawn in two passes counts twice.');
+  const vertexNote = h('div', { class: 'note', style: 'margin-top:8px' });
+  computeVertexStats(ctx).then((v) =>
+  {
+    geometry.querySelector('.n')!.textContent = v.geometry.toLocaleString();
+    total.querySelector('.n')!.textContent = v.total.toLocaleString();
+    const notes: string[] = [];
+    if (v.estimated) notes.push(`${v.estimated} indexed draw${v.estimated === 1 ? '' : 's'} counted by index count (their index data wasn’t captured).`);
+    if (v.unknown) notes.push(`${v.unknown} indirect draw${v.unknown === 1 ? '' : 's'} not counted (arguments not captured).`);
+    vertexNote.textContent = notes.join(' ');
+  }, (e) =>
+  {
+    vertexNote.textContent = `Could not count vertices: ${e?.message ?? e}`;
+  });
   page.append(
     h('h2', null, 'Frame'),
     h('div', { class: 'stats' },
       stat(s.draws ?? 0, 'draws'),
+      geometry,
+      total,
       stat(s.dispatches ?? 0, 'dispatches'),
       stat(s.renderPasses ?? 0, 'render passes'),
       stat(s.computePasses ?? 0, 'compute passes'),
       stat(s.submits ?? 0, 'submits'),
       stat(s.commandBuffers ?? 0, 'command buffers'),
       stat(s.snapshots ?? 0, 'images'),
-      stat(fmtBytes(s.bufferBytes ?? 0), 'buffer data'),
+      stat(fmtBytes(s.bufferBytes ?? 0), 'buffer contents copied', 'Bytes of buffer data the capture copied (uniform, storage, vertex, index and indirect buffers), so the viewer can show their contents.'),
       stat(`${Math.round(m.durationMs)} ms`, 'recording time')
-    )
+    ),
+    vertexNote
   );
   if (m.warnings.length)
   {

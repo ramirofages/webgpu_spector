@@ -19,6 +19,9 @@ icon, press **Capture frame**, and a new tab opens with the captured frame:
   inputs/outputs and compilation messages.
 - **Resources**: every texture, buffer, pipeline, shader, bind group and sampler in the
   frame, each with the images and buffer contents captured for it.
+- **Info**: frame stats, including **geometry vertices** (vertices of the geometries drawn,
+  summed over draws; indexed draws count the unique vertices their indices reference) and
+  **total vertices** (geometry × instance count), plus device, adapter and canvas details.
 - **Export / Import**: save a capture to a `.json` file and open it later or send it to someone.
 
 Tested with three.js r183 `WebGPURenderer` (MSAA, log depth, shadows, AgX, half-float output
@@ -73,7 +76,7 @@ window.__WEBGPU_SPECTOR__?.capture({ snapshotSize: 2048 });   // override any op
 | Max draws with images | 1500 | Later draws are still recorded, without images. |
 | Depth image after every draw | on | Normalized to the depth range actually used. |
 | Previews of sampled textures | on | Taken at the end of the pass that samples them. |
-| Buffer contents | on | Buffers ≤ the per-buffer limit are copied whole; bigger ones only their bound ranges. |
+| Buffer contents | on | Buffers ≤ the per-buffer limit are copied whole; bigger ones only their bound ranges. Index buffers use a 64 MB limit (the vertex counts need them). |
 | JS stack trace per draw | on | |
 | Show float targets sRGB-encoded | on | `rgba16float` targets are usually linear. |
 | Lossless images | off | Default is high-quality lossy WebP; lossless keeps exact pixels (~4× bigger). |

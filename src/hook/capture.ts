@@ -25,6 +25,7 @@ import {
 
 const SNAPSHOT_MEMORY_LIMIT = 1536 * 1024 * 1024;
 const MAX_CAPTURE_MS = 10000;
+const INDEX_BUFFER_MAX_BYTES = 64 << 20;
 
 let internalErrors = 0;
 
@@ -180,16 +181,34 @@ export class BundleRec
         break;
       case 'setIndexBuffer':
         this.ib = { buffer: args[0], format: args[1], offset: args[2] ?? 0, size: args[3] };
-        this.usage.buffer(args[0], args[2] ?? 0, args[3]);
         break;
     }
     if (DRAW_METHODS.has(name))
     {
       this.draws++;
       if (name.includes('Indirect')) this.usage.buffer(args[0], args[1] ?? 0, indirectBytes(name, args));
+      useIndices(this.usage, this.ib, name, args);
       c.draw = { state: stateOf(this.pipeline, this.bindGroups, this.vbs, this.ib) };
     }
     this.cmds.push(c);
+  }
+}
+
+/**
+ * Marks the index range a draw reads, so buffer snapshots cover exactly what was drawn (big index
+ * buffers are only copied by range). Indirect indexed draws keep their range on the GPU: whole buffer.
+ */
+function useIndices(usage: Usage, ib: any, name: string, args: any[]): void
+{
+  if (!ib) return;
+  if (name === 'drawIndexed')
+  {
+    const sz = ib.format === 'uint32' ? 4 : 2;
+    usage.buffer(ib.buffer, ib.offset + (Number(args[2]) || 0) * sz, (Number(args[0]) || 0) * sz);
+  }
+  else if (name === 'drawIndexedIndirect' || name === 'multiDrawIndexedIndirect')
+  {
+    usage.buffer(ib.buffer, ib.offset, ib.size);
   }
 }
 
@@ -316,7 +335,6 @@ export class PassRec
         break;
       case 'setIndexBuffer':
         this.ib = { buffer: args[0], format: args[1], offset: args[2] ?? 0, size: args[3] };
-        this.usage.buffer(args[0], args[2] ?? 0, args[3]);
         break;
       case 'setViewport':
         this.viewport = Array.from(args).slice(0, 6);
@@ -361,6 +379,7 @@ export class PassRec
       const st = rec.stack();
       if (st !== undefined) c.st = st;
       if (name.includes('Indirect')) this.usage.buffer(args[0], args[1] ?? 0, indirectBytes(name, args));
+      useIndices(this.usage, this.ib, name, args);
       if (this.kind === 'render') this.trySnap(c);
     }
     else if (name === 'endOcclusionQuery' && this.pendingSnap)
@@ -1020,7 +1039,9 @@ export class Recorder
       const info = getInfo(buf);
       if (info?.destroyed) continue;
       const epoch = this.bufEpoch.get(buf) ?? 0;
-      const whole = buf.size <= s.maxBufferBytes;
+      // Index data drives the vertex counts and the index view, so it gets a much higher limit.
+      const maxBytes = buf.usage & BU.INDEX ? Math.max(s.maxBufferBytes, INDEX_BUFFER_MAX_BYTES) : s.maxBufferBytes;
+      const whole = buf.size <= maxBytes;
       const cached = whole ? this.bufSnapCache.get(buf) : undefined;
       if (cached && cached.epoch === epoch)
       {
@@ -1036,7 +1057,7 @@ export class Recorder
         device: pr.enc.device,
         encoder: pr.enc.encoder,
         owner: pr.enc,
-        maxBytes: s.maxBufferBytes,
+        maxBytes,
         budget: this.bufferBudget
       });
       if (!snap) continue;
